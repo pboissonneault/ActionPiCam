@@ -39,22 +39,24 @@ GPIO.setup(led_picture, GPIO.OUT) #LED for picture
 GPIO.setup(led_recording, GPIO.OUT) #LED for recording
 
 recording = 0
-base_path = "/home/pi/"
-app_path = base_path + "actionpicam/"
+app_path = os.path.dirname(os.path.realpath(__file__)) + os.sep
 
-video_path = app_path + "video/"
+video_path = app_path + "video" + os.sep
 vid_rec_num = "vid_rec_num.txt"
 vid_rec_num_fp = app_path + vid_rec_num # need full path if run from rc.local
 base_vidfile = "raspivid -t 3600000 -o " + video_path
 
 base_mp4_vidfile = ""
 
-pic_path = app_path + "photo/"
+pic_path = app_path + "photo" + os.sep
 pic_rec_num = "pic_rec_num.txt"
 pic_rec_num_fp = app_path + pic_rec_num # need full path if run from rc.local
 base_picfile = "raspistill -r -t 1 -o " + pic_path
 
 time_off = time.time()
+
+def root_path():
+    return os.path.abspath(os.sep)
 
 def write_rec_num(which):
     if(which == "video"):
@@ -103,11 +105,12 @@ def stop_recording():
 
     #Convert to MP4
     print "Converting video to MP4"
+    #TODO: do the conversion
 
     space_used()     # display space left on recording drive
 
 def space_used():    # function to display space left on recording device
-    output_df = subprocess.Popen(["df", "-Ph", "/"], stdout=subprocess.PIPE).communicate()[0]
+    output_df = subprocess.Popen(["df", "-Ph", root_path()], stdout=subprocess.PIPE).communicate()[0]
     it_num = 0
     for line in output_df.split("\n"):
         line_list = line.split()
@@ -141,22 +144,15 @@ def take_picture_callback(channel):
         take_picture(picture_rec_num)
 
 def flash(interval,reps):
-    GPIO.output(led_recording, 0)
-    GPIO.output(led_started, 0)
-    GPIO.output(led_picture, 0)
+    leds = [led_recording, led_started, led_picture]
+    for led in leds :
+        GPIO.output(led, 0)
     for i in range(reps):
-        GPIO.output(led_recording, 1)
-        sleep(interval)
-        GPIO.output(led_recording, 0)
-        sleep(interval)
-        GPIO.output(led_picture, 1)
-        sleep(interval)
-        GPIO.output(led_picture, 0)
-        sleep(interval)
-        GPIO.output(led_started, 1)
-        sleep(interval)
-        GPIO.output(led_started, 0)
-        sleep(interval)
+        for led in leds:
+            GPIO.output(led, 1)
+            sleep(interval)
+            GPIO.output(led, 0)
+            sleep(interval)
 
 def shutdown():
     print "shutting down now"
@@ -258,7 +254,6 @@ try:
                 shutdown()
 
 except KeyboardInterrupt:
-    print 'ctrl + c'
     stop_recording()
     GPIO.output(led_started, 0)
     GPIO.cleanup()       # clean up GPIO on CTRL+C exit
