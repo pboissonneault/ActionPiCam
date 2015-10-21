@@ -3,6 +3,7 @@
 # needs RPi.GPIO 0.5.2 or later
 # updated to work on the A+
 
+# Notes for wiki
 # sudo apt-get install -y gpac
 # crontab -e
 # --> @reboot sh /home/pi/actionpicam/launcher.sh >/home/pi/logs/cronlog 2>&1
