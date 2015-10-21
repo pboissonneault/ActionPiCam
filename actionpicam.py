@@ -17,9 +17,11 @@ import os
 
 GPIO.setmode(GPIO.BOARD)
 
-led_started = 36
-led_recording = 38
-led_picture = 37
+led_started = 36   #LED to know when the app is running
+led_recording = 38 #LED to know if it is recording
+led_picture = 37   #LED (bright LED) to illuminate subject while taking a picture
+leds = [led_recording, led_started, led_picture]
+
 button_record = 33
 button_stop = 35
 button_picture = 40
@@ -33,10 +35,9 @@ GPIO.setup(button_picture, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 # GPIO 35 set up as an input, pulled down, connected to 3V3 on button press
 GPIO.setup(button_stop, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 
-# Set up GPIO 5 for camera LED control and rear LED control
-GPIO.setup(led_started, GPIO.OUT) #LED for running app
-GPIO.setup(led_picture, GPIO.OUT) #LED for picture
-GPIO.setup(led_recording, GPIO.OUT) #LED for recording
+# Set up LEDs (36, 37 and 38)
+for led in leds:
+    GPIO.setup(led, GPIO.OUT)
 
 recording = 0
 app_path = os.path.dirname(os.path.realpath(__file__)) + os.sep
@@ -144,7 +145,6 @@ def take_picture_callback(channel):
         take_picture(picture_rec_num)
 
 def flash(interval,reps):
-    leds = [led_recording, led_started, led_picture]
     for led in leds :
         GPIO.output(led, 0)
     for i in range(reps):
@@ -154,12 +154,16 @@ def flash(interval,reps):
             GPIO.output(led, 0)
             sleep(interval)
 
+def cleanup():
+    for led in leds:
+        GPIO.output(led, 0)
+    GPIO.cleanup()
+
 def shutdown():
     print "shutting down now"
     stop_recording()
-    flash(0.05,50)
-    GPIO.output(led_started, 0)
-    GPIO.cleanup()
+    flash(0.05,25)
+    cleanup()
     os.system("sudo halt")
     sys.exit()
 
@@ -220,8 +224,7 @@ try:
 except:
     print("Problem listing " + app_path)
     flash(0.1,10)
-    GPIO.output(led_started, 0)
-    GPIO.cleanup()
+    cleanup()
     sys.exit()
 
 try:
@@ -244,9 +247,8 @@ try:
 
         if 25 <= i < 58:              # if released between 1.25 & 3s close prog
             print "Closing program"
-            flash(0.02,50) # interval,reps
-            GPIO.output(led_started, 0)
-            GPIO.cleanup()
+            flash(0.02,25) # interval,reps
+            cleanup()
             sys.exit()
 
         if GPIO.input(button_stop):
@@ -255,5 +257,4 @@ try:
 
 except KeyboardInterrupt:
     stop_recording()
-    GPIO.output(led_started, 0)
-    GPIO.cleanup()       # clean up GPIO on CTRL+C exit
+    cleanup()
