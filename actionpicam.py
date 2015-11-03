@@ -70,10 +70,13 @@ def write_rec_num(which):
         prnw.write(str(picture_rec_num))
         prnw.close()
 
+def get_filename(rec_num)
+    return str(rec_num).zfill(5)
+
 def start_recording(rec_num):
     global recording
     if recording == 0:
-        vidfile = base_vidfile + str(rec_num).zfill(5)
+        vidfile = base_vidfile + get_filename(rec_num)
         vidfile += ".h264  -fps 25 -b 15000000 -vs" #-w 1280 -h 720 -awb tungsten
         print "starting recording\n%s" % vidfile
         time_now = time.time()
@@ -97,6 +100,7 @@ def take_picture(rec_num):
 # seems to be low enough to avoid this 
 
 def stop_recording():
+    global video_rec_num
     global recording
     global time_off
     time_off = time.time()
@@ -107,7 +111,9 @@ def stop_recording():
 
     #Convert to MP4
     print "Converting video to MP4"
-    #TODO: do the conversion
+    filename = video_path + get_filename(video_rec_num)
+    call (["MP4Box -add %s.h264 %s.mp4" % (filename, filename)], shell=True)
+    os.remove("%s.h264" % (filename))
 
     space_used()     # display space left on recording drive
 
