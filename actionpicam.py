@@ -71,7 +71,7 @@ def write_rec_num(which):
 def get_filename(rec_num, extension)
     filename = str(rec_num).zfill(5)
     if extension != ""
-        filename = "%s.$s" % (filename, extension)
+        filename = "%s.%s" % (filename, extension)
     return filename
 
 def start_recording(rec_num):
