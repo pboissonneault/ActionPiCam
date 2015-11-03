@@ -48,8 +48,6 @@ vid_rec_num = "vid_rec_num.txt"
 vid_rec_num_fp = app_path + vid_rec_num # need full path if run from rc.local
 base_vidfile = "raspivid -t 3600000 -o " + video_path
 
-base_mp4_vidfile = ""
-
 pic_path = app_path + "photo" + os.sep
 pic_rec_num = "pic_rec_num.txt"
 pic_rec_num_fp = app_path + pic_rec_num # need full path if run from rc.local
@@ -70,14 +68,17 @@ def write_rec_num(which):
         prnw.write(str(picture_rec_num))
         prnw.close()
 
-def get_filename(rec_num)
-    return str(rec_num).zfill(5)
+def get_filename(rec_num, extension)
+    filename = str(rec_num).zfill(5)
+    if extension != ""
+        filename = "%s.$s" % (filename, extension)
+    return filename
 
 def start_recording(rec_num):
     global recording
     if recording == 0:
-        vidfile = base_vidfile + get_filename(rec_num)
-        vidfile += ".h264  -fps 25 -b 15000000 -vs" #-w 1280 -h 720 -awb tungsten
+        vidfile = base_vidfile + get_filename(rec_num, "h264")
+        vidfile += " -fps 25 -b 15000000 -vs" #-w 1280 -h 720 -awb tungsten
         print "starting recording\n%s" % vidfile
         time_now = time.time()
         if (time_now - time_off) >= 0.3:
@@ -87,8 +88,7 @@ def start_recording(rec_num):
     recording = 0 # only kicks in if the video runs the full period
 
 def take_picture(rec_num):
-    picfile = base_picfile + str(rec_num).zfill(5)
-    picfile += ".raw"
+    picfile = base_picfile + get_filename(rec_num, "raw")
     print "Taking picture\n%s" % picfile
     GPIO.output(led_picture, 1)
     call ([picfile], shell=True)
@@ -111,7 +111,7 @@ def stop_recording():
 
     #Convert to MP4
     print "Converting video to MP4"
-    filename = video_path + get_filename(video_rec_num)
+    filename = video_path + get_filename(video_rec_num, "")
     call (["MP4Box -add %s.h264 %s.mp4" % (filename, filename)], shell=True)
     os.remove("%s.h264" % (filename))
 
