@@ -1,4 +1,4 @@
 #!/bin/sh
 # launcher.sh
 
-python ~/ActionPiCam/actionpicam.py
+python /home/pi/ActionPiCam/actionpicam.py

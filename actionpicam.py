@@ -9,8 +9,9 @@
 # --> @reboot sh /home/pi/actionpicam/launcher.sh >/home/pi/logs/cronlog 2>&1
 
 import RPi.GPIO as GPIO
-from subprocess import call
 import subprocess
+import signal
+import threading
 from time import sleep
 import time
 import sys
@@ -40,9 +41,9 @@ GPIO.setup(button_stop, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 for led in leds:
     GPIO.setup(led, GPIO.OUT)
 
-recording = 0
 app_path = os.path.dirname(os.path.realpath(__file__)) + os.sep
 
+video_popen = None
 video_path = app_path + "video" + os.sep
 vid_rec_num = "vid_rec_num.txt"
 vid_rec_num_fp = app_path + vid_rec_num # need full path if run from rc.local
@@ -55,10 +56,65 @@ base_picfile = "raspistill -r -t 1 -o " + pic_path
 
 time_off = time.time()
 
+class ThreadConvert(threading.Thread):
+    def __init__(self,filename):
+        super(FlashLeds, self).__init__()
+        self._filename = filename
+
+    def run(self):
+        # fl = do_the_flashing([led_recording],0.2)
+        subprocess.call (["MP4Box -add %s.h264 %s.mp4" % (self._filename, self._filename)], shell=True)
+        os.remove("%s.h264" % (self._filename))
+        # fl.stop()
+
+    def stop(self):
+        self._stop.set()
+
+    def stopped(self):
+        return self._stop.isSet()
+
+class FlashLeds(threading.Thread):
+    def __init__(self,leds,interval):
+        super(FlashLeds, self).__init__()
+        self._stop = threading.Event()
+        self._leds = leds
+        self._interval = interval
+
+    def run(self):
+        while True:
+            for led in self._leds:
+                GPIO.output(led, 1)
+                sleep(self._interval)
+                GPIO.output(led, 0)
+                sleep(self._interval)
+
+    def stop(self):
+        self._stop.set()
+
+    def stopped(self):
+        return self._stop.isSet()
+
+    def __del__(self):
+        for led in self._leds:
+            GPIO.output(led, 0)
+
+def do_the_flashing(leds_to_flash,interval,wait=None):
+    fl = FlashLeds(leds_to_flash,interval)
+    fl.daemon = True
+    fl.start()
+    if(wait is not None):
+        sleep(wait)
+        fl.stop()
+        return None
+    else:
+        return fl
+
 def root_path():
     return os.path.abspath(os.sep)
 
 def write_rec_num(which):
+    global video_rec_num
+    global picture_rec_num
     if(which == "video"):
         vrnw = open(vid_rec_num_fp, 'w')
         vrnw.write(str(video_rec_num))
@@ -68,30 +124,28 @@ def write_rec_num(which):
         prnw.write(str(picture_rec_num))
         prnw.close()
 
-def get_filename(rec_num, extension)
+def get_filename(rec_num, extension):
     filename = str(rec_num).zfill(5)
-    if extension != ""
+    if extension != "":
         filename = "%s.%s" % (filename, extension)
     return filename
 
 def start_recording(rec_num):
-    global recording
-    if recording == 0:
+    global video_popen
+    if video_popen is None:
         vidfile = base_vidfile + get_filename(rec_num, "h264")
         vidfile += " -fps 25 -b 15000000 -vs" #-w 1280 -h 720 -awb tungsten
         print "starting recording\n%s" % vidfile
         time_now = time.time()
         if (time_now - time_off) >= 0.3:
             GPIO.output(led_recording, 1)
-            recording = 1
-            call ([vidfile], shell=True)
-    recording = 0 # only kicks in if the video runs the full period
+            video_popen = subprocess.Popen ( vidfile.split() )
 
 def take_picture(rec_num):
     picfile = base_picfile + get_filename(rec_num, "raw")
     print "Taking picture\n%s" % picfile
     GPIO.output(led_picture, 1)
-    call ([picfile], shell=True)
+    subprocess.call ([picfile], shell=True)
     GPIO.output(led_picture, 0)
 
 #### Quality VS length ###
@@ -101,21 +155,24 @@ def take_picture(rec_num):
 
 def stop_recording():
     global video_rec_num
-    global recording
     global time_off
-    time_off = time.time()
-    print "stopping recording"
-    GPIO.output(led_recording, 0)
-    call (["pkill raspivid"], shell=True)
-    recording = 0
+    global video_popen
+    if video_popen is not None and video_popen.poll() is None:
+        time_off = time.time()
+        print "Stopping recording"
+        GPIO.output(led_recording, 0)
+        video_popen.send_signal ( signal.SIGINT )
+        video_popen = None
 
-    #Convert to MP4
-    print "Converting video to MP4"
-    filename = video_path + get_filename(video_rec_num, "")
-    call (["MP4Box -add %s.h264 %s.mp4" % (filename, filename)], shell=True)
-    os.remove("%s.h264" % (filename))
+        #Convert to MP4
+        filename = video_path + get_filename(video_rec_num, "")
+        if(os.path.isfile("%s.h264" % (filename) )):
+            print "Converting video to MP4"
+            tc = ThreadConvert(filename)
+        else :
+            print "File %s.h264 does not exists" % (filename)
 
-    space_used()     # display space left on recording drive
+        space_used()     # display space left on recording drive
 
 def space_used():    # function to display space left on recording device
     output_df = subprocess.Popen(["df", "-Ph", root_path()], stdout=subprocess.PIPE).communicate()[0]
@@ -134,11 +191,12 @@ def space_used():    # function to display space left on recording device
 # this increments variable rec_num for filename and starts recording
 def record_video_callback(channel):
     global video_rec_num
+    global video_popen
     time_now = time.time()
     if (time_now - time_off) >= 0.3:
         print "record button pressed"
-        video_rec_num += 1
-        if recording == 0:
+        if video_popen is None:
+            video_rec_num += 1
             write_rec_num("video")
             start_recording(video_rec_num)
 
@@ -151,16 +209,6 @@ def take_picture_callback(channel):
         write_rec_num("picture")
         take_picture(picture_rec_num)
 
-def flash(interval,reps):
-    for led in leds :
-        GPIO.output(led, 0)
-    for i in range(reps):
-        for led in leds:
-            GPIO.output(led, 1)
-            sleep(interval)
-            GPIO.output(led, 0)
-            sleep(interval)
-
 def cleanup():
     for led in leds:
         GPIO.output(led, 0)
@@ -169,7 +217,7 @@ def cleanup():
 def shutdown():
     print "shutting down now"
     stop_recording()
-    flash(0.05,25)
+    fl = do_the_flashing(leds,0.05,3)
     cleanup()
     os.system("sudo halt")
     sys.exit()
@@ -230,7 +278,7 @@ try:
 
 except:
     print("Problem listing " + app_path)
-    flash(0.1,10)
+    fl = do_the_flashing(leds,0.1,2)
     cleanup()
     sys.exit()
 
@@ -241,6 +289,7 @@ try:
         # stop recording and shutdown gracefully
         print "Waiting for button press" # rising edge on port 35
         GPIO.wait_for_edge(button_stop, GPIO.RISING)
+
         print "Stop button pressed"
         stop_recording()
 
@@ -254,7 +303,7 @@ try:
 
         if 25 <= i < 58:              # if released between 1.25 & 3s close prog
             print "Closing program"
-            flash(0.02,25) # interval,reps
+            fl = do_the_flashing(leds,0.02,2)
             cleanup()
             sys.exit()
 
