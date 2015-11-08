@@ -58,7 +58,7 @@ time_off = time.time()
 
 class ThreadConvert(threading.Thread):
     def __init__(self,filename):
-        super(FlashLeds, self).__init__()
+        super(ThreadConvert, self).__init__()
         self._filename = filename
 
     def run(self):
@@ -169,6 +169,7 @@ def stop_recording():
         if(os.path.isfile("%s.h264" % (filename) )):
             print "Converting video to MP4"
             tc = ThreadConvert(filename)
+            tc.start()
         else :
             print "File %s.h264 does not exists" % (filename)
 
